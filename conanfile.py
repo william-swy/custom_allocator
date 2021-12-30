@@ -5,6 +5,6 @@ class CustomAllocator(ConanFile):
     name = "CustomAllocator"
     version = "0.1"
     requires = (
-        "cpputest/4.0"
+        "catch2/2.13.7",
     )
-    generators = "cmake", "gcc", "txt", "cmake_find_package", "cmake_paths"
+    generators = "cmake", "gcc", "txt", "cmake_find_package"

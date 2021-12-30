@@ -1,15 +1,19 @@
-find_package(CppUTest REQUIRED)
+find_package(Catch2 REQUIRED)
 
-add_executable(lkl_malloc_tests 
-	"lkl_malloc_test.cpp" 
-	"all_tests.cpp"
-	"mock_sbrk.cpp")
+include(CTest)
+include(Catch)
 
-# Set compiler warnings
-set_project_warnings(lkl_malloc_tests)
+# Compiles a static lib from the Catch2 header to shorten the entire build process
+add_library(catch_main STATIC "catch_main.cpp")
+target_link_libraries(catch_main PUBLIC Catch2::Catch2)
+target_link_libraries(catch_main PRIVATE project_options project_cxx_warnings)
 
-#target_include_directories(lkl_malloc_tests PRIVATE "${CMAKE_SOURCE_DIR}/src" "${CMAKE_SOURCE_DIR}/include")
+add_executable(lkl_malloc_tests "lkl_malloc_test.cpp" "mock_sbrk.cpp")
 
-target_link_libraries(lkl_malloc_tests PRIVATE custom_allocator CppUTest::CppUTest CppUTest::CppUTestExt)
-
-target_compile_features(lkl_malloc_tests PRIVATE cxx_std_20)
+# Link and also set compiler warnings and compile options
+target_link_libraries(
+  lkl_malloc_tests
+  PRIVATE custom_allocator
+          catch_main
+          project_cxx_warnings
+          project_options)

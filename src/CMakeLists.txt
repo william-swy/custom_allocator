@@ -6,9 +6,7 @@ cmake_minimum_required(VERSION 3.8)
 add_library(custom_allocator STATIC "lkl_malloc.c")
 
 # Set compiler warnings
-set_project_warnings(custom_allocator)
+target_link_libraries(custom_allocator PRIVATE project_c_warnings)
 
 target_include_directories(custom_allocator PUBLIC $<INSTALL_INTERFACE:include>
                                                    $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/include>)
-
-# TODO: Add tests and install targets if needed.

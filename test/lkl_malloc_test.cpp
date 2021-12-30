@@ -7,26 +7,21 @@
 // https://stackoverflow.com/questions/44073243/how-to-mock-socket-in-c
 // https://stackoverflow.com/questions/2924440/advice-on-mocking-system-calls
 
-#include "CppUTest/TestHarness.h"
-#include "CppUTestExt/MockSupport.h"
+#include <catch2/catch.hpp>
 
 extern "C" {
 #include "custom_allocator/lkl_malloc.h"
 extern void* ret_val;
 }
 
-TEST_GROUP(lkl_malloc_test){
-
-};
-
-TEST(lkl_malloc_test, AllocateZero)
+TEST_CASE("First allocation - allocate zero space", "[lkl_malloc]")
 {
-  CHECK(lkl_malloc(0) == NULL);
+  REQUIRE(lkl_malloc(0) == NULL);
 }
 
-TEST(lkl_malloc_test, FirstAllocationNoAvailableSpace)
+TEST_CASE("First allocation - no space available", "[lkl_malloc]")
 {
   ret_val = reinterpret_cast<void*>(-1);
   constexpr size_t request_size = 100;
-  CHECK(lkl_malloc(request_size) == NULL);
+  REQUIRE(lkl_malloc(request_size) == NULL);
 }

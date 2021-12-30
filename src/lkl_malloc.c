@@ -113,7 +113,7 @@ struct block_meta* find_free_block(struct block_meta** last_block, size_t reques
 struct block_meta* request_space(struct block_meta* last_block, size_t request_size)
 {
   struct block_meta* requested_block = (struct block_meta*)sbrk(0);
-  void* requested_alloc = (struct block_meta*)sbrk(request_size + sizeof(struct block_meta));
+  void* requested_alloc = (struct block_meta*)sbrk((intptr_t) (request_size + sizeof(struct block_meta)));
 
   if (requested_alloc == (void*)-1) {
     return NULL;
