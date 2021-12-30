@@ -52,7 +52,7 @@ void* lkl_malloc(size_t requested_size)
   return (block_to_give + 1);
 }
 
-void* realloc(void* ptr, size_t requested_size)
+void* lkl_realloc(void* ptr, size_t requested_size)
 {
   // NULL case: Allocate some new memory
   if (!ptr) {
@@ -78,7 +78,7 @@ void* realloc(void* ptr, size_t requested_size)
   return new_allocation;
 }
 
-void* calloc(size_t num_elem, size_t elem_size)
+void* lkl_calloc(size_t num_elem, size_t elem_size)
 {
   size_t total_size = num_elem * elem_size;  // Potential overflow if product is too large
   void* new_allocation = lkl_malloc(total_size);

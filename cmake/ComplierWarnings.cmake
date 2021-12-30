@@ -1,7 +1,5 @@
-# Adds warnings to the target based on ${warning_lang} and selected compiler
-# Valid options for ${warning_lang}:
-#   - "CC" for C language warnings
-#   - "CXX" for C++ language warnings
+# Adds warnings to the target based on ${warning_lang} and selected compiler Valid options for ${warning_lang}: - "CC"
+# for C language warnings - "CXX" for C++ language warnings
 
 function(set_project_warnings warning_lang project_name)
   option(WARNINGS_AS_ERRORS "Treat compiler warnings as errors" ON)

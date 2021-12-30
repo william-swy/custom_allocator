@@ -369,3 +369,6 @@ CMakeSettings.json
 
 # MSVC build director
 /out
+
+# CTest
+/Testing
