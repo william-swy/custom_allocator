@@ -19,7 +19,7 @@ void init_heap(char* given_heap, size_t len)
 
 void* sbrk(size_t increment)
 {
-  if (heap_top + increment >= heap_size) {
+  if (heap_top + increment > heap_size) {
     return (void*)-1;
   } else {
     char* allocated_address = &heap_base[heap_top];

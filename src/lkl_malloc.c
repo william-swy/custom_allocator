@@ -12,13 +12,13 @@ struct block_meta
   size_t block_size;
   struct block_meta* next;
   int is_free;
-  int magic;
 };
 
 static inline struct block_meta* find_free_block(struct block_meta** last_block, size_t request_size);
 static inline struct block_meta* request_space(struct block_meta* last_block, size_t request_size);
 static inline struct block_meta* get_block_ptr(void* ptr);
 
+// TODO: Thread safe version
 void* lkl_malloc(size_t requested_size)
 {
   struct block_meta* block_to_give;
@@ -45,7 +45,6 @@ void* lkl_malloc(size_t requested_size)
     } else {
       // TODO: split block
       block_to_give->is_free = 0;
-      block_to_give->magic = 0x77777777;
     }
   }
 
@@ -95,9 +94,7 @@ void lkl_free(void* ptr)
   // TODO: merge blocks
   struct block_meta* block_ptr = get_block_ptr(ptr);
   assert(block_ptr->is_free == 0);
-  assert(block_ptr->magic == 0x77777777 || block_ptr->magic == 0x12345678);
   block_ptr->is_free = 1;
-  block_ptr->magic = 0x55555555;
 }
 
 struct block_meta* find_free_block(struct block_meta** last_block, size_t request_size)
@@ -113,7 +110,7 @@ struct block_meta* find_free_block(struct block_meta** last_block, size_t reques
 struct block_meta* request_space(struct block_meta* last_block, size_t request_size)
 {
   struct block_meta* requested_block = (struct block_meta*)sbrk(0);
-  void* requested_alloc = (struct block_meta*)sbrk((intptr_t) (request_size + sizeof(struct block_meta)));
+  void* requested_alloc = (struct block_meta*)sbrk((intptr_t)(request_size + sizeof(struct block_meta)));
 
   if (requested_alloc == (void*)-1) {
     return NULL;
@@ -128,7 +125,6 @@ struct block_meta* request_space(struct block_meta* last_block, size_t request_s
   requested_block->block_size = request_size;
   requested_block->next = NULL;
   requested_block->is_free = 0;
-  requested_block->magic = 0x12345678;
 
   return requested_block;
 }

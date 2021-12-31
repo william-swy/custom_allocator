@@ -2,7 +2,7 @@
 set(ALL_CMAKE_FILES
     cmake/scripts/dev-tools.cmake
     cmake/PreventInSource.cmake
-    cmake/ComplierWarnings.cmake
+    cmake/CompilerWarnings.cmake
     cmake/Conan.cmake
     src/CMakeLists.txt
     test/CMakeLists.txt

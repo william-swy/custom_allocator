@@ -51,8 +51,6 @@ macro(run_conan)
       ${CMAKE_SOURCE_DIR}
       BUILD
       missing
-      # Pass compile-time configured options into conan
-      OPTIONS
       SETTINGS
       ${settings})
   endforeach()

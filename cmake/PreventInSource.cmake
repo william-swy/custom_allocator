@@ -5,6 +5,9 @@ function(AssureOutOfSourceBuilds)
   get_filename_component(srcdir "${CMAKE_SOURCE_DIR}" REALPATH)
   get_filename_component(bindir "${CMAKE_BINARY_DIR}" REALPATH)
 
+  message(STATUS "srcdir ${srcdir}")
+  message(STATUS "bindir ${bindir}")
+
   # disallow in-source builds
   if("${srcdir}" STREQUAL "${bindir}")
     message("######################################################")
