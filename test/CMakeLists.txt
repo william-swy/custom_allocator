@@ -3,6 +3,16 @@ find_package(Catch2 REQUIRED)
 include(CTest)
 include(Catch)
 
+# gcovr for coverage
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID MATCHES ".*Clang")
+  option(ENABLE_COVERAGE "Enable gcovr coverage --coverage" OFF)
+  if(ENABLE_COVERAGE)
+    message("Building tests with coverage")
+    target_compile_options(project_options INTERFACE --coverage -O0 -g)
+      target_link_libraries(project_options INTERFACE --coverage)
+  endif()
+endif()
+
 # Compiles a static lib from the Catch2 header to shorten the entire build process
 add_library(catch_main STATIC "catch_main.cpp")
 target_link_libraries(catch_main PUBLIC Catch2::Catch2)

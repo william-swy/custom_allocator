@@ -7,6 +7,8 @@
 // https://stackoverflow.com/questions/44073243/how-to-mock-socket-in-c
 // https://stackoverflow.com/questions/2924440/advice-on-mocking-system-calls
 
+#include <algorithm>
+#include <array>
 #include <catch2/catch.hpp>
 #include <cstddef>
 
@@ -158,7 +160,7 @@ TEST_CASE("lkl_malloc repeat allocate until full variable size", "[lkl_malloc]")
 
   SECTION("Total allocations uses heap completely - no fragmentation")
   {
-    std::size_t heap_size = req_size8_act + req_size16_act + req_size24_act + req_size16_act;
+    constexpr std::size_t heap_size = req_size8_act + req_size16_act + req_size24_act + req_size16_act;
     char test_heap[heap_size];
     init_heap(test_heap, heap_size);
 
@@ -190,7 +192,7 @@ TEST_CASE("lkl_malloc repeat allocate until full variable size", "[lkl_malloc]")
 
   SECTION("Total allocations uses heap partially - fragmentation")
   {
-    std::size_t heap_size = req_size16_act + req_size24_act + req_size16_act + req_size8_act;
+    constexpr std::size_t heap_size = req_size16_act + req_size24_act + req_size16_act + req_size8_act;
     char test_heap[heap_size];
     init_heap(test_heap, heap_size);
 
@@ -212,5 +214,78 @@ TEST_CASE("lkl_malloc repeat allocate until full variable size", "[lkl_malloc]")
 
     char* req4 = reinterpret_cast<char*>(lkl_malloc(req_size16));
     REQUIRE(req4 == NULL);
+  }
+}
+
+TEST_CASE("lkl_malloc reuses freed blocks", "[lkl_malloc]")
+{
+  global_base = NULL;
+  REQUIRE(global_base == NULL);
+
+  constexpr std::size_t heap_size = 0x100;
+  char test_heap[heap_size];
+  init_heap(test_heap, heap_size);
+
+  SECTION("reuse previously freed block")
+  {
+    constexpr std::size_t request_size = 8;
+    void* init_alloc = lkl_malloc(request_size);  // technically dangling but we control how memory is allocated so we can deem this non UB.
+    lkl_free(init_alloc);
+    void* next_alloc = lkl_malloc(request_size);
+    REQUIRE(next_alloc != NULL);
+    REQUIRE(ptr_in_bounds(reinterpret_cast<char*>(next_alloc), request_size, test_heap, heap_size));
+    REQUIRE(next_alloc == init_alloc);
+  }
+
+  SECTION("reuse first available freed block")
+  {
+    constexpr std::size_t req_size = 8;
+    void* fst_alloc = lkl_malloc(req_size);
+    void* sec_alloc = lkl_malloc(req_size);
+    lkl_free(sec_alloc);
+    void* trd_alloc = lkl_malloc(req_size);
+
+    REQUIRE(trd_alloc != NULL);
+    REQUIRE(ptr_in_bounds(reinterpret_cast<char*>(trd_alloc), req_size, test_heap, heap_size));
+    REQUIRE(trd_alloc == sec_alloc);
+  }
+
+  SECTION("reuse first available freed block of suffice size")
+  {
+    constexpr std::array<std::size_t, 5> alloc_sizes = {8, 16, 8, 32, 64};
+    std::array<void*, 5> alloc_ptrs = {0, 0, 0, 0, 0};
+
+    for (std::size_t idx = 0; idx < alloc_sizes.size(); idx++) {
+      alloc_ptrs[idx] = lkl_malloc(alloc_sizes[idx]);
+    }
+
+    std::for_each(alloc_ptrs.begin(), alloc_ptrs.end(), lkl_free);
+
+    constexpr std::size_t req_size = 24;
+    void* new_alloc = lkl_malloc(req_size);
+    REQUIRE(new_alloc != NULL);
+    REQUIRE(ptr_in_bounds(reinterpret_cast<char*>(new_alloc), req_size, test_heap, heap_size));
+    REQUIRE(new_alloc == alloc_ptrs[3]);
+  }
+
+  SECTION("multiple reuse")
+  {
+    std::size_t req_size = 64;
+    void* fst_alloc = lkl_malloc(req_size);
+    void* sec_alloc = lkl_malloc(req_size);
+
+    lkl_free(fst_alloc);
+    lkl_free(sec_alloc);
+
+    void* fst_reuse = lkl_malloc(req_size);
+    void* sec_reuse = lkl_malloc(req_size);
+
+    REQUIRE(fst_reuse != NULL);
+    REQUIRE(ptr_in_bounds(reinterpret_cast<char*>(fst_reuse), req_size, test_heap, heap_size));
+    REQUIRE(fst_reuse == fst_alloc);
+
+    REQUIRE(sec_reuse != NULL);
+    REQUIRE(ptr_in_bounds(reinterpret_cast<char*>(sec_reuse), req_size, test_heap, heap_size));
+    REQUIRE(sec_reuse == sec_alloc);
   }
 }
