@@ -11,6 +11,7 @@
 #include <array>
 #include <catch2/catch.hpp>
 #include <cstddef>
+#include <random>
 
 extern "C" {
 #include "lkl_malloc.c"
@@ -252,10 +253,11 @@ TEST_CASE("lkl_malloc reuses freed blocks", "[lkl_malloc]")
 
   SECTION("reuse first available freed block of suffice size")
   {
-    constexpr std::array<std::size_t, 5> alloc_sizes = {8, 16, 8, 32, 64};
-    std::array<void*, 5> alloc_ptrs = {0, 0, 0, 0, 0};
+    constexpr std::size_t num_allocs = 5;
+    constexpr std::array<std::size_t, num_allocs> alloc_sizes = {8, 16, 8, 32, 64};
+    std::array<void*, num_allocs> alloc_ptrs = {0, 0, 0, 0, 0};
 
-    for (std::size_t idx = 0; idx < alloc_sizes.size(); idx++) {
+    for (std::size_t idx = 0; idx < num_allocs; idx++) {
       alloc_ptrs[idx] = lkl_malloc(alloc_sizes[idx]);
     }
 
@@ -287,5 +289,81 @@ TEST_CASE("lkl_malloc reuses freed blocks", "[lkl_malloc]")
     REQUIRE(sec_reuse != NULL);
     REQUIRE(ptr_in_bounds(reinterpret_cast<char*>(sec_reuse), req_size, test_heap, heap_size));
     REQUIRE(sec_reuse == sec_alloc);
+  }
+}
+
+TEST_CASE("lkl_malloc various workloads", "[lkl_malloc]")
+{
+  global_base = NULL;
+  REQUIRE(global_base == NULL);
+
+  SECTION("Multiple repeat fixed-size allocation then repeat free")
+  {
+    constexpr std::size_t alloc_size = 4096 - sizeof(struct block_meta);
+    constexpr std::size_t num_allocs = 1000;
+    constexpr std::size_t heap_size = (alloc_size + sizeof(struct block_meta)) * num_allocs;
+    constexpr std::size_t num_iter = 1000;
+
+    char test_heap[heap_size];
+    init_heap(test_heap, heap_size);
+
+    std::array<void*, num_allocs> alloc_ptrs;
+    alloc_ptrs.fill(NULL);
+
+    for (std::size_t iter = 0; iter < num_iter; iter++) {
+      for (std::size_t alloc_num = 0; alloc_num < num_allocs; alloc_num++) {
+        if (alloc_ptrs[alloc_num] != NULL) {
+          lkl_free(alloc_ptrs[alloc_num]);
+          alloc_ptrs[alloc_num] = NULL;
+        } else {
+          void* alloc_res = lkl_malloc(alloc_size);
+
+          REQUIRE(alloc_res != NULL);
+          REQUIRE(ptr_in_bounds(reinterpret_cast<char*>(alloc_res), alloc_size, test_heap, heap_size));
+
+          alloc_ptrs[alloc_num] = alloc_res;
+        }
+      }
+    }
+  }
+
+  SECTION("Multiple random allocations and frees from uniform distribution")
+  {
+    constexpr std::size_t min_alloc_size = 8;
+    constexpr std::size_t max_alloc_size = 4096;
+    constexpr std::size_t num_rand_allocs = 1024;
+    constexpr std::size_t num_rand_iters = 1000000;
+
+    constexpr std::size_t heap_size = num_rand_allocs * (max_alloc_size + sizeof(struct block_meta));
+    char test_heap[heap_size];
+    init_heap(test_heap, heap_size);
+
+    std::string seed_str("3458755949");  // Some random string
+    std::seed_seq seed(seed_str.begin(), seed_str.end());
+    std::mt19937 gen(seed);  // mersenne twister
+
+    std::uniform_int_distribution<std::size_t> alloc_size_rng(min_alloc_size, max_alloc_size);
+    std::uniform_int_distribution<std::size_t> idx_access_rng(0, num_rand_allocs - 1);
+
+    std::array<std::size_t, num_rand_allocs> alloc_sizes;
+    for (std::size_t idx = 0; idx < num_rand_allocs; idx++) {
+      alloc_sizes[idx] = alloc_size_rng(gen);
+    }
+
+    std::array<void*, num_rand_allocs> alloc_ptrs;
+    alloc_ptrs.fill(NULL);
+
+    for (std::size_t iter = 0; iter < num_rand_iters; iter++) {
+      std::size_t idx = idx_access_rng(gen);
+      if (alloc_ptrs[idx] != NULL) {
+        lkl_free(alloc_ptrs[idx]);
+        alloc_ptrs[idx] = NULL;
+      } else {
+        void* res = lkl_malloc(alloc_sizes[idx]);
+        REQUIRE(res != NULL);
+        REQUIRE(ptr_in_bounds(reinterpret_cast<char*>(res), alloc_sizes[idx], test_heap, heap_size));
+        alloc_ptrs[idx] = res;
+      }
+    }
   }
 }
