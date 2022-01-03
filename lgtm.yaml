@@ -1,0 +1,23 @@
+path_classifiers:
+  test:
+    - "*/test/**/*"
+extraction:
+  cpp:
+    prepare:
+      packages:
+        - gcc-10
+        - g++-10
+        - ccache
+      script:
+        - mkdir ~/.conan
+        - cat /usr/local/share/ca-certificates/semmle-cache-ca/semmle-cache-ca.crt >> ~/.conan/cacert.pem
+        - python3 -m pip install --upgrade pip setuptools
+        - python3 -m pip install conan
+        - python3 -m pip install cmake
+        - source ~/.profile
+    configure:
+      command:
+        - mkdir build
+        - cmake -D ENABLE_COVERAGE:BOOL=TRUE -S . -B build
+    index:
+      build_command: cmake --build ./build -- -j2
