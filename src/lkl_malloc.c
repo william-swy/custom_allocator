@@ -58,8 +58,13 @@ void* lkl_realloc(void* ptr, size_t requested_size)
     return lkl_malloc(requested_size);
   }
 
-  // Requested size is a shrink. At the moment do nothing.
+  // Requested size is a shrink relative to block. 
+  // At the moment do nothing.
   // Potentially do a block split in the future.
+  //
+  // Resizing on 0 size where memory for new object is not allocated
+  // is implementation specific on freeing the old object (see 7.22.3.5).
+  // For this implementation it is chosen to not free.
   struct block_meta* curr_block_ptr = get_block_ptr(ptr);
   if (curr_block_ptr->block_size >= requested_size) {
     return ptr;
@@ -77,10 +82,26 @@ void* lkl_realloc(void* ptr, size_t requested_size)
   return new_allocation;
 }
 
+// Having a total size of zero is fine as C17/18 defines it to be implementation
+// specific. Thus if total size is zero we will just return NULL.
+// Quote:
+//      "If the size of the space requested is zero,
+//       the behavior is implementation-defined:
+//       either a null pointer is returned to indicate
+//       an error, or the behavior is as if the size were
+//       some nonzero value, except that the returned pointer
+//       shall not be used to access an object.
+//       C17dr § 7.22.3 1"
+//
 void* lkl_calloc(size_t num_elem, size_t elem_size)
 {
   size_t total_size = num_elem * elem_size;  // Potential overflow if product is too large
   void* new_allocation = lkl_malloc(total_size);
+
+  if (new_allocation == NULL) {
+    return NULL;
+  }
+
   memset(new_allocation, 0, total_size);
   return new_allocation;
 }

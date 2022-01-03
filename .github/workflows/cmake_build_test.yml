@@ -66,11 +66,11 @@ jobs:
           sudo update-alternatives --install /usr/bin/conan conan /home/runner/.local/bin/conan 10
           sudo update-alternatives --config conan
           
-        elif [ "$RUNNER_OS" == "Windows" ]; then
-          echo "Using chocolatey to install OpenCppCoverage"
-          choco install opencppcoverage
-          # Add to Path
-          echo "C:/Program Files/OpenCppCoverage" >> $GITHUB_PATH
+        #elif [ "$RUNNER_OS" == "Windows" ]; then
+        #  echo "Using chocolatey to install OpenCppCoverage"
+        #  choco install opencppcoverage
+        #  # Add to Path
+        #  echo "C:/Program Files/OpenCppCoverage" >> $GITHUB_PATH
         fi;
     - name: Configure CMake
       run: |

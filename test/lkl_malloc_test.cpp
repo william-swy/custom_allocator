@@ -11,11 +11,13 @@
 #include <array>
 #include <catch2/catch.hpp>
 #include <cstddef>
+#include <cstring>
+#include <limits>
 #include <random>
 
 extern "C" {
 #include "lkl_malloc.c"
-extern void init_heap(char* given_heap, size_t len);
+#include "mock_sbrk.h"
 }
 
 // Checks if the returned pointer to newly allocated memory is within the bounds of the specified heap
@@ -365,5 +367,296 @@ TEST_CASE("lkl_malloc various workloads", "[lkl_malloc]")
         alloc_ptrs[idx] = res;
       }
     }
+  }
+}
+
+TEST_CASE("lkl_free NULL pointer argument is valid", "[lkl_free]")
+{
+  global_base = NULL;
+  REQUIRE(global_base == NULL);
+
+  constexpr std::size_t heap_size = 4096;
+  char test_heap[heap_size];
+  init_heap(test_heap, heap_size);
+
+  void* req = lkl_malloc(128);
+
+  lkl_free(NULL);
+
+  REQUIRE(true);  // Checks if execution is able to reach here
+}
+
+// Checks if all bytes in a memory block is all zero
+bool is_mem_block_zero(const char* start, std::size_t num_bytes)
+{
+  for (std::size_t idx = 0; idx < num_bytes; idx++) {
+    if (start[idx] != 0) {
+      return false;
+    }
+  }
+  return true;
+}
+
+TEST_CASE("lkl_calloc single allocation", "[lkl_calloc]")
+{
+  global_base = NULL;
+  REQUIRE(global_base == NULL);
+
+  constexpr std::size_t heap_size = 4096;
+  char test_heap[heap_size];
+  init_heap(test_heap, heap_size);
+
+  SECTION("first allocation")
+  {
+    constexpr std::size_t num_elem = 16;
+    constexpr std::size_t elem_size = 64;
+    constexpr std::size_t alloc_size = num_elem * elem_size;
+    void* res = lkl_calloc(num_elem, elem_size);
+
+    REQUIRE(res != NULL);
+    REQUIRE(ptr_in_bounds(reinterpret_cast<char*>(res), alloc_size, test_heap, heap_size));
+    REQUIRE(is_mem_block_zero(reinterpret_cast<char*>(res), alloc_size));
+  }
+
+  SECTION("num_elem zero valid argument")
+  {
+    constexpr std::size_t num_elem = 0;
+    constexpr std::size_t elem_size = 64;
+    void* res = lkl_calloc(num_elem, elem_size);
+
+    REQUIRE(res == NULL);
+  }
+
+  SECTION("elem_size zero valid argument")
+  {
+    constexpr std::size_t num_elem = 64;
+    constexpr std::size_t elem_size = 0;
+    void* res = lkl_calloc(num_elem, elem_size);
+
+    REQUIRE(res == NULL);
+  }
+
+  SECTION("no free blocks, increases heap size")
+  {
+    constexpr std::size_t lkl_malloc_size = 128;
+    constexpr std::size_t num_elem = 16;
+    constexpr std::size_t elem_size = 64;
+    constexpr std::size_t alloc_size = num_elem * elem_size;
+
+    void* fst_alloc = lkl_malloc(lkl_malloc_size);
+    void* sec_alloc = lkl_malloc(lkl_malloc_size);
+
+    void* res = lkl_calloc(num_elem, elem_size);
+
+    REQUIRE(res != NULL);
+    REQUIRE(reinterpret_cast<char*>(res) == reinterpret_cast<char*>(sec_alloc) + lkl_malloc_size + sizeof(struct block_meta));
+    REQUIRE(ptr_in_bounds(reinterpret_cast<char*>(res), alloc_size, test_heap, heap_size));
+    REQUIRE(is_mem_block_zero(reinterpret_cast<char*>(res), alloc_size));
+  }
+}
+
+TEST_CASE("lkl_calloc reuses freed segments", "[lkl_calloc]")
+{
+  global_base = NULL;
+  REQUIRE(global_base == NULL);
+
+  constexpr std::size_t heap_size = 4096;
+  char test_heap[heap_size];
+  init_heap(test_heap, heap_size);
+
+  SECTION("zeros out previous values")
+  {
+    constexpr std::size_t num_elem = 32;
+    constexpr std::size_t elem_size = 64;
+    constexpr std::size_t alloc_size = num_elem * elem_size;
+
+    char* res1 = reinterpret_cast<char*>(lkl_malloc(alloc_size));
+    for (std::size_t idx = 0; idx < alloc_size; idx++) {
+      res1[idx] = static_cast<char>(idx);
+    }
+
+    lkl_free(res1);
+
+    char* res2 = reinterpret_cast<char*>(lkl_calloc(num_elem, elem_size));
+
+    REQUIRE(res2 != NULL);
+    REQUIRE(res2 == res1);
+    REQUIRE(ptr_in_bounds(res2, alloc_size, test_heap, heap_size));
+    REQUIRE(is_mem_block_zero(res2, alloc_size));
+  }
+
+  SECTION("finds appropriate block for request size")
+  {
+    constexpr std::size_t num_allocs = 5;
+    constexpr std::size_t num_elem = 2;
+    constexpr std::size_t elem_size = 64;
+
+    constexpr std::array<std::size_t, num_allocs> alloc_sizes = {8, 8, 16, num_elem * elem_size + 8, 32};
+    std::array<char*, num_allocs> ptrs = {0};
+
+    for (std::size_t idx = 0; idx < num_allocs; idx++) {
+      char* ptr = reinterpret_cast<char*>(lkl_malloc(alloc_sizes[idx]));
+      ptr[0] = idx;
+      ptrs[idx] = ptr;
+    }
+
+    for (std::size_t idx = 0; idx < num_allocs; idx++) {
+      lkl_free(ptrs[idx]);
+    }
+
+    char* res = reinterpret_cast<char*>(lkl_calloc(num_elem, elem_size));
+
+    REQUIRE(res != NULL);
+    REQUIRE(res == ptrs[3]);
+    REQUIRE(ptr_in_bounds(res, num_elem * elem_size, test_heap, heap_size));
+    REQUIRE(is_mem_block_zero(res, num_elem * elem_size));
+  }
+}
+
+TEST_CASE("lkl_realloc given null pointer", "[lkl_realloc]")
+{
+  global_base = NULL;
+  REQUIRE(global_base == NULL);
+
+  constexpr std::size_t heap_size = 4096;
+  char test_heap[heap_size];
+  init_heap(test_heap, heap_size);
+
+  SECTION("resize to 0")
+  {
+    constexpr std::size_t req_size = 0;
+    REQUIRE(lkl_realloc(NULL, req_size) == NULL);
+  }
+
+  SECTION("resize to non-zero")
+  {
+    constexpr std::size_t req_size = 1024;
+    void* res = lkl_realloc(NULL, req_size);
+
+    REQUIRE(res != NULL);
+    REQUIRE(ptr_in_bounds(reinterpret_cast<char*>(res), req_size, test_heap, heap_size));
+  }
+}
+
+bool mem_chunk_equal(const char* chunk1, const char* chunk2, std::size_t size)
+{
+  for (std::size_t idx = 0; idx < size; idx++) {
+    if (chunk1[idx] != chunk2[idx]) {
+      return false;
+    }
+  }
+  return true;
+}
+
+TEST_CASE("lkl_realloc valid pointer fittable in current block", "[lkl_malloc]")
+{
+  global_base = NULL;
+  REQUIRE(global_base == NULL);
+
+  constexpr std::size_t heap_size = 4096;
+  char test_heap[heap_size];
+  init_heap(test_heap, heap_size);
+
+  constexpr std::size_t req_size = 1024;
+  void* res = lkl_malloc(req_size);
+
+  std::string seed_str("0037383008");
+  std::seed_seq seed(seed_str.begin(), seed_str.end());
+  std::mt19937 gen(seed);
+  std::uniform_int_distribution<char> rng(std::numeric_limits<char>::min(), std::numeric_limits<char>::max());
+
+  for (std::size_t idx = 0; idx < req_size; idx++) {
+    reinterpret_cast<char*>(res)[idx] = rng(gen);
+  }
+
+  SECTION("resize to zero")
+  {
+    constexpr std::size_t resize_val = 0;
+    void* resized = lkl_realloc(res, resize_val);
+
+    REQUIRE(resized != NULL);
+    REQUIRE(resized == res);
+  }
+
+  SECTION("resize to non-zero but smaller")
+  {
+    constexpr std::size_t resize_val = 512;
+    void* resized = lkl_realloc(res, resize_val);
+
+    REQUIRE(resized != NULL);
+    REQUIRE(resized == res);
+    REQUIRE(ptr_in_bounds(reinterpret_cast<char*>(resized), resize_val, test_heap, heap_size));
+    REQUIRE(mem_chunk_equal(reinterpret_cast<char*>(resized), reinterpret_cast<char*>(res), resize_val));
+  }
+
+  SECTION("resize to same size as original allocation")
+  {
+    void* resized = lkl_realloc(res, req_size);
+
+    REQUIRE(resized != NULL);
+    REQUIRE(resized == res);
+    REQUIRE(ptr_in_bounds(reinterpret_cast<char*>(resized), req_size, test_heap, heap_size));
+    REQUIRE(mem_chunk_equal(reinterpret_cast<char*>(resized), reinterpret_cast<char*>(res), req_size));
+  }
+
+  SECTION("resize to larger value in fragmented block")
+  {
+    lkl_free(res);
+    void* req = lkl_malloc(req_size / 4);
+    std::memset(req, 5, req_size / 4);
+    REQUIRE(req == res);
+
+    void* resized = lkl_realloc(req, req_size / 2);
+
+    REQUIRE(resized != NULL);
+    REQUIRE(resized == res);
+    REQUIRE(ptr_in_bounds(reinterpret_cast<char*>(resized), req_size / 2, test_heap, heap_size));
+    REQUIRE(mem_chunk_equal(reinterpret_cast<char*>(resized), reinterpret_cast<char*>(req), req_size / 4));
+  }
+}
+
+TEST_CASE("lkl_realloc valid pointer increase space", "[lkl_malloc]")
+{
+  global_base = NULL;
+  REQUIRE(global_base == NULL);
+
+  constexpr std::size_t heap_size = 4096;
+  char test_heap[heap_size];
+  init_heap(test_heap, heap_size);
+
+  constexpr std::size_t req_size = 1024;
+  void* res = lkl_malloc(req_size);
+
+  std::string seed_str("9300820273");
+  std::seed_seq seed(seed_str.begin(), seed_str.end());
+  std::mt19937 gen(seed);
+  std::uniform_int_distribution<char> rng(std::numeric_limits<char>::min(), std::numeric_limits<char>::max());
+
+  for (std::size_t idx = 0; idx < req_size; idx++) {
+    reinterpret_cast<char*>(res)[idx] = rng(gen);
+  }
+
+  SECTION("request size too large")
+  {
+    void* resized = lkl_realloc(res, heap_size);
+
+    REQUIRE(resized == NULL);
+
+    // Original value should not be freed
+    REQUIRE((reinterpret_cast<struct block_meta*>(res) - 1)->is_free == 0);
+  }
+
+  SECTION("request size can be satisfied")
+  {
+    void* resized = lkl_realloc(res, req_size * 2);
+
+    REQUIRE(resized != NULL);
+    REQUIRE(ptr_in_bounds(reinterpret_cast<char*>(resized), req_size * 2, test_heap, heap_size));
+
+    // Technically dereferencing freed memory but we know what the behaviour is.
+    REQUIRE(mem_chunk_equal(reinterpret_cast<char*>(resized), reinterpret_cast<char*>(res), req_size));
+
+    // Original value should not be freed
+    REQUIRE((reinterpret_cast<struct block_meta*>(res) - 1)->is_free == 1);
   }
 }
