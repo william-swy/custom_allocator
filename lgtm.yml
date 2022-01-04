@@ -18,6 +18,6 @@ extraction:
     configure:
       command:
         - mkdir build
-        - cmake -D ENABLE_COVERAGE:BOOL=TRUE -S . -B build
+        - cmake -D ENABLE_COVERAGE:BOOL=TRUE -D CMAKE_CXX_COMPILER=g++ -D CMAKE_C_COMPILER=gcc -S . -B build
     index:
       build_command: cmake --build ./build -- -j2
